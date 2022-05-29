@@ -62,8 +62,6 @@ namespace clipboardhistory
                         .AddText(GetClipboardData().Replace("\0", ""))
                         .Show();
             }
-
-            //Debug.WriteLine($"tomost: {SettingsInit.Config.topmost} Toast: {SettingsInit.Config.toast}");
         }
 
         public bool checkExist(string v)
@@ -94,35 +92,47 @@ namespace clipboardhistory
         static extern bool OpenClipboard(IntPtr hWndNewOwner);
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool CloseClipboard();
+        [DllImport("user32.dll")]
+        internal static extern bool SetClipboardData(uint uFormat, IntPtr data);
 
         enum TextEncode : uint
         {
             CF_TEXT = 1,
-            CF_UNICODETEXT = 13,
+            CF_UNICODETEXT = 13, 
             CF_OEMTEXT = 7,
         }
 
-        public static string GetClipboardData()
+        public string GetClipboardData()
         {
             OpenClipboard(IntPtr.Zero);
-            IntPtr ClipboardDataPointer = GetClipboardData((uint)TextEncode.CF_OEMTEXT);
+            IntPtr ClipboardDataPointer = GetClipboardData((uint)TextEncode.CF_TEXT); // fix é è à etc
             IntPtr Length = GlobalSize(ClipboardDataPointer);
+            label1.Text = $"Length: {(int)Length}";
             IntPtr gLock = GlobalLock(ClipboardDataPointer);
+            label2.Text = $"Location: {string.Format("{0:X8}", gLock)}";
             byte[] Buffer = new byte[(int)Length];
             Marshal.Copy(gLock, Buffer, 0, (int)Length);
             CloseClipboard();
+            //ReadMemory(gLock); // TEST
             return Encoding.Default.GetString(Buffer);
 
+        }
+
+        public void SetClipboardData(string data)
+        {
+            OpenClipboard(IntPtr.Zero);
+            var ptr = Marshal.StringToHGlobalUni(data);
+            SetClipboardData((uint)TextEncode.CF_TEXT, ptr);
+            CloseClipboard();
+            Marshal.FreeHGlobal(ptr);
         }
 
         private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (listBox1.SelectedIndex != -1 && listBox1.SelectedItem != null)
-                Clipboard.SetText(listBox1.SelectedItem.ToString());
-            //Clipboard.SetDataObject(yourTreeNodeDataObject);
-            //Clipboard.GetDataObject(yourTreeNodeDataObject);
+                Clipboard.SetText((string)listBox1.SelectedItem, TextDataFormat.UnicodeText);
         }
-
+        
         private void button1_Click(object sender, EventArgs e)
         {
             listBox1.Items.Clear();
@@ -138,6 +148,29 @@ namespace clipboardhistory
             var line = "\n------------------------------------------------------------------------------------------------------------\n";
             foreach (var listBoxItem in listBox1.Items)
                 File.AppendAllText(DateTime.Now.ToString("MM_dd_yyyy") + "_Save.txt", line+ listBoxItem.ToString()+ line + "\n");
+        }
+
+        private void label2_Click(object sender, EventArgs e)
+        {
+            Clipboard.SetText(label2.Text.Replace("Location: ", "" ));
+        }
+
+        private void label1_Click(object sender, EventArgs e)
+        {
+            Clipboard.SetText(label1.Text.Replace("Length: ", ""));
+        }
+
+        // TEST ----------------------------------------------
+
+        public void ReadMemory(IntPtr loca)
+        {
+            string ProcessName = "clipboardhistory";
+            Process proc = Process.GetProcessesByName(ProcessName)[0];
+            var hProc = mem.OpenProcess(mem.ProcessAccessFlags.All, false, proc.Id);
+            var read = mem.GetModuleBaseAddress(proc.Id, $"{ProcessName}.exe");
+            var blap = mem.FindDMAAddy(hProc, (IntPtr)(read + (int)loca), new int[] { 1337 });
+            Debug.WriteLine("Last Error: " + Marshal.GetLastWin32Error());
+            Debug.WriteLine("Something address " + "0x" + blap.ToString("X"));
         }
     }
 }
