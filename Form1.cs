@@ -60,12 +60,31 @@ namespace clipboardhistory
 
             if (checkExist(GetClipboardDatatype()))
             {
+                GetClipboardData();
                 listBox1.Items.Add(GetClipboardDatatype());
                 if (SettingsInit.Config.toast)
                     new ToastContentBuilder()
                         .AddText(GetClipboardDatatype())
                         .Show();
             }
+        }
+        enum TextEncode : uint
+        {
+            CF_TEXT = 1,
+            CF_UNICODETEXT = 13,
+            CF_OEMTEXT = 7,
+        }
+
+        public string GetClipboardData()
+        {
+            ext.OpenClipboard(IntPtr.Zero);
+            IntPtr ClipboardDataPointer = ext.GetClipboardData((uint)TextEncode.CF_TEXT);
+            IntPtr Length = ext.GlobalSize(ClipboardDataPointer);
+            label1.Text = $"Length: {(int)Length}";
+            IntPtr gLock = ext.GlobalLock(ClipboardDataPointer);
+            label2.Text = $"Location: {string.Format("{0:X8}", gLock)}";
+            ext.CloseClipboard();
+            return "a";
         }
 
         public bool checkExist(string v)
@@ -86,7 +105,6 @@ namespace clipboardhistory
             return Task.CompletedTask;
         }
 
-        // get clipboard data type
         private string GetClipboardDatatype()
         {
             var data = "";
