@@ -20,6 +20,7 @@ namespace clipboardhistory
             timer1.Interval = 2000;
             timer1.Start();
 
+            ext.AddClipboardFormatListener(this.Handle);
 
             _globalData = new SettingsInit();
             await _globalData.InitializeAsync();
@@ -44,6 +45,8 @@ namespace clipboardhistory
                 JsonUpdate("toast", checkBox2);
             }
             base.OnFormClosing(e);
+
+            ext.RemoveClipboardFormatListener(this.Handle);
         }
 
         private async void timer1_Tick(object sender, EventArgs e)
@@ -82,18 +85,8 @@ namespace clipboardhistory
             return Task.CompletedTask;
         }
 
-        [DllImport("kernel32.dll")]
-        public static extern IntPtr GlobalSize(IntPtr handle);
-        [DllImport("kernel32.dll")]
-        static extern IntPtr GlobalLock(IntPtr hMem);
-        [DllImport("user32.dll")]
-        static extern IntPtr GetClipboardData(uint uFormat);
-        [DllImport("user32.dll", SetLastError = true)]
-        static extern bool OpenClipboard(IntPtr hWndNewOwner);
-        [DllImport("user32.dll", SetLastError = true)]
-        static extern bool CloseClipboard();
-        [DllImport("user32.dll")]
-        internal static extern bool SetClipboardData(uint uFormat, IntPtr data);
+        private const int WM_CLIPBOARDUPDATE = 0x031D;
+
 
         enum TextEncode : uint
         {
@@ -102,35 +95,60 @@ namespace clipboardhistory
             CF_OEMTEXT = 7,
         }
 
+        enum GetClipboardDataFlags
+        {
+            RECO_PASTE = 0,
+            RECO_DROP = 1,
+            RECO_COPY = 2,
+            RECO_CUT = 3,
+            RECO_DRAG = 4
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+
+            if (m.Msg == WM_CLIPBOARDUPDATE)
+            {
+                IDataObject iData = Clipboard.GetDataObject();
+                if (iData.GetDataPresent(DataFormats.Text))
+                {
+                    GetClipboardData();
+                }
+            }
+        }
+
         public string GetClipboardData()
         {
-            OpenClipboard(IntPtr.Zero);
-            IntPtr ClipboardDataPointer = GetClipboardData((uint)TextEncode.CF_TEXT); // fix é è à etc
-            IntPtr Length = GlobalSize(ClipboardDataPointer);
+            ext.OpenClipboard(IntPtr.Zero);
+            IntPtr ClipboardDataPointer = ext.GetClipboardData((uint)TextEncode.CF_TEXT); // fix é è à etc
+            IntPtr Length = ext.GlobalSize(ClipboardDataPointer);
             label1.Text = $"Length: {(int)Length}";
-            IntPtr gLock = GlobalLock(ClipboardDataPointer);
+            IntPtr gLock = ext.GlobalLock(ClipboardDataPointer);
             label2.Text = $"Location: {string.Format("{0:X8}", gLock)}";
             byte[] Buffer = new byte[(int)Length];
             Marshal.Copy(gLock, Buffer, 0, (int)Length);
-            CloseClipboard();
-            //ReadMemory(gLock); // TEST
+            ext.CloseClipboard();
             return Encoding.Default.GetString(Buffer);
-
         }
 
         public void SetClipboardData(string data)
         {
-            OpenClipboard(IntPtr.Zero);
-            var ptr = Marshal.StringToHGlobalUni(data);
-            SetClipboardData((uint)TextEncode.CF_TEXT, ptr);
-            CloseClipboard();
-            Marshal.FreeHGlobal(ptr);
+            string nullTerminatedStr = data + "\0";
+            byte[] strBytes = Encoding.Unicode.GetBytes(nullTerminatedStr);
+            IntPtr hglobal = Marshal.AllocHGlobal(strBytes.Length);
+            Marshal.Copy(strBytes, 0, hglobal, strBytes.Length);
+            ext.OpenClipboard(IntPtr.Zero);
+            ext.EmptyClipboard();
+            ext.SetClipboardData((uint)TextEncode.CF_UNICODETEXT, hglobal);
+            ext.CloseClipboard();
+            //Marshal.FreeHGlobal(hglobal);
         }
 
         private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (listBox1.SelectedIndex != -1 && listBox1.SelectedItem != null)
-                Clipboard.SetText((string)listBox1.SelectedItem, TextDataFormat.UnicodeText);
+                SetClipboardData((string)listBox1.SelectedItem);
         }
         
         private void button1_Click(object sender, EventArgs e)
@@ -143,6 +161,13 @@ namespace clipboardhistory
 
         }
 
+        private String GetClipboardFormatName(uint ClipboardFormat)
+        {
+            StringBuilder sb = new StringBuilder(1000);
+            ext.GetClipboardFormatName(ClipboardFormat, sb, sb.Capacity);
+            return sb.ToString();
+        }
+
         private void button2_Click(object sender, EventArgs e)
         {
             var line = "\n------------------------------------------------------------------------------------------------------------\n";
@@ -152,12 +177,12 @@ namespace clipboardhistory
 
         private void label2_Click(object sender, EventArgs e)
         {
-            Clipboard.SetText(label2.Text.Replace("Location: ", "" ));
+            SetClipboardData(label2.Text.Replace("Location: ", "" ));
         }
 
         private void label1_Click(object sender, EventArgs e)
         {
-            Clipboard.SetText(label1.Text.Replace("Length: ", ""));
+            SetClipboardData(label1.Text.Replace("Length: ", ""));
         }
 
         // TEST ----------------------------------------------
