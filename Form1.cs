@@ -50,7 +50,7 @@ namespace clipboardhistory
         }
 
         private async void timer1_Tick(object sender, EventArgs e)
-        { 
+        {
             await JsonUpdate("topmost", checkBox1);
             await JsonUpdate("toast", checkBox2);
             SettingsInit.Config.topmost = checkBox1.Checked;
@@ -58,11 +58,12 @@ namespace clipboardhistory
 
             TopMost = SettingsInit.Config.topmost;
 
-            if (checkExist(GetClipboardData().Replace("\0", ""))) { 
-                listBox1.Items.Add(GetClipboardData().Replace("\0", ""));
+            if (checkExist(GetClipboardDatatype()))
+            {
+                listBox1.Items.Add(GetClipboardDatatype());
                 if (SettingsInit.Config.toast)
                     new ToastContentBuilder()
-                        .AddText(GetClipboardData().Replace("\0", ""))
+                        .AddText(GetClipboardDatatype())
                         .Show();
             }
         }
@@ -85,72 +86,67 @@ namespace clipboardhistory
             return Task.CompletedTask;
         }
 
-        private const int WM_CLIPBOARDUPDATE = 0x031D;
-
-
-        enum TextEncode : uint
+        // get clipboard data type
+        private string GetClipboardDatatype()
         {
-            CF_TEXT = 1,
-            CF_UNICODETEXT = 13, 
-            CF_OEMTEXT = 7,
-        }
-
-        enum GetClipboardDataFlags
-        {
-            RECO_PASTE = 0,
-            RECO_DROP = 1,
-            RECO_COPY = 2,
-            RECO_CUT = 3,
-            RECO_DRAG = 4
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            base.WndProc(ref m);
-
-            if (m.Msg == WM_CLIPBOARDUPDATE)
+            var data = "";
+            if (Clipboard.ContainsText())
             {
-                IDataObject iData = Clipboard.GetDataObject();
-                if (iData.GetDataPresent(DataFormats.Text))
-                {
-                    GetClipboardData();
-                }
+                data = Clipboard.GetText();
             }
-        }
-
-        public string GetClipboardData()
-        {
-            ext.OpenClipboard(IntPtr.Zero);
-            IntPtr ClipboardDataPointer = ext.GetClipboardData((uint)TextEncode.CF_TEXT); // fix é è à etc
-            IntPtr Length = ext.GlobalSize(ClipboardDataPointer);
-            label1.Text = $"Length: {(int)Length}";
-            IntPtr gLock = ext.GlobalLock(ClipboardDataPointer);
-            label2.Text = $"Location: {string.Format("{0:X8}", gLock)}";
-            byte[] Buffer = new byte[(int)Length];
-            Marshal.Copy(gLock, Buffer, 0, (int)Length);
-            ext.CloseClipboard();
-            return Encoding.Default.GetString(Buffer);
-        }
-
-        public void SetClipboardData(string data)
-        {
-            string nullTerminatedStr = data + "\0";
-            byte[] strBytes = Encoding.Unicode.GetBytes(nullTerminatedStr);
-            IntPtr hglobal = Marshal.AllocHGlobal(strBytes.Length);
-            Marshal.Copy(strBytes, 0, hglobal, strBytes.Length);
-            ext.OpenClipboard(IntPtr.Zero);
-            ext.EmptyClipboard();
-            ext.SetClipboardData((uint)TextEncode.CF_UNICODETEXT, hglobal);
-            ext.CloseClipboard();
-            //Marshal.FreeHGlobal(hglobal);
+            else if (Clipboard.ContainsImage())
+            {
+                data = "Image";
+            }
+            else if (Clipboard.ContainsFileDropList())
+            {
+                data = Clipboard.GetFileDropList()[0].Replace(@"\", "\\");
+            }
+            else if (Clipboard.ContainsAudio())
+            {
+                data = "Audio";
+            }
+            else if (Clipboard.ContainsData(DataFormats.Rtf))
+            {
+                data = "RTF";
+            }
+            else if (Clipboard.ContainsData(DataFormats.CommaSeparatedValue))
+            {
+                data = "CSV";
+            }
+            else if (Clipboard.ContainsData(DataFormats.Html))
+            {
+                data = "HTML";
+            }
+            else if (Clipboard.ContainsData(DataFormats.Dib))
+            {
+                data = "DIB";
+            }
+            else if (Clipboard.ContainsData(DataFormats.Dif))
+            {
+                data = "DIF";
+            }
+            else if (Clipboard.ContainsData(DataFormats.EnhancedMetafile))
+            {
+                data = "EMF";
+            }
+            else if (Clipboard.ContainsData(DataFormats.FileDrop))
+            {
+                data = Clipboard.GetFileDropList()[0].Replace(@"\", @"\\");
+            }
+            else if (Clipboard.ContainsData(DataFormats.Locale))
+            {
+                data = "Loc";
+            }
+            return data;
         }
 
         private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (listBox1.SelectedIndex != -1 && listBox1.SelectedItem != null)
-                SetClipboardData((string)listBox1.SelectedItem);
+                Clipboard.SetText((string)listBox1.SelectedItem);
         }
-        
+
         private void button1_Click(object sender, EventArgs e)
         {
             listBox1.Items.Clear();
@@ -161,28 +157,21 @@ namespace clipboardhistory
 
         }
 
-        private String GetClipboardFormatName(uint ClipboardFormat)
-        {
-            StringBuilder sb = new StringBuilder(1000);
-            ext.GetClipboardFormatName(ClipboardFormat, sb, sb.Capacity);
-            return sb.ToString();
-        }
-
         private void button2_Click(object sender, EventArgs e)
         {
             var line = "\n------------------------------------------------------------------------------------------------------------\n";
             foreach (var listBoxItem in listBox1.Items)
-                File.AppendAllText(DateTime.Now.ToString("MM_dd_yyyy") + "_Save.txt", line+ listBoxItem.ToString()+ line + "\n");
+                File.AppendAllText(DateTime.Now.ToString("MM_dd_yyyy") + "_Save.txt", line + listBoxItem.ToString() + line + "\n");
         }
 
         private void label2_Click(object sender, EventArgs e)
         {
-            SetClipboardData(label2.Text.Replace("Location: ", "" ));
+            Clipboard.SetText(label2.Text.Replace("Location: ", ""));
         }
 
         private void label1_Click(object sender, EventArgs e)
         {
-            SetClipboardData(label1.Text.Replace("Length: ", ""));
+            Clipboard.SetText(label1.Text.Replace("Length: ", ""));
         }
 
         // TEST ----------------------------------------------
